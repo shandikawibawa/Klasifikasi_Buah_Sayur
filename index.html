@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Food Fresh AI - Preprocessing Fix</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.18.0/dist/tf.min.js"></script>
+    <style>
+        body { font-family: sans-serif; background-color: #f0f2f5; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        .card { background: white; padding: 30px; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
+        .upload-area { border: 3px dashed #2ecc71; padding: 20px; border-radius: 15px; cursor: pointer; margin-bottom: 20px; }
+        #preview { max-width: 100%; border-radius: 10px; display: none; margin-bottom: 20px; }
+        button { background-color: #27ae60; color: white; border: none; padding: 15px; border-radius: 10px; cursor: pointer; width: 100%; font-weight: bold; font-size: 16px; }
+        #result { margin-top: 20px; padding: 15px; border-radius: 10px; background: #f8f9fa; display: none; }
+        .label { font-size: 1.8rem; font-weight: bold; display: block; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h2>🌿 Food Fresh AI</h2>
+        <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+            <p id="txt-upload">Klik untuk Upload Foto</p>
+            <img id="preview">
+        </div>
+        <input type="file" id="fileInput" accept="image/*" style="display: none;" onchange="loadFile(event)">
+        <button id="btn-predict" onclick="predict()" disabled>Memuat Model...</button>
+        
+        <div id="result">
+            <span id="label-text" class="label">---</span>
+            <span id="conf-text">Akurasi: 0%</span>
+        </div>
+    </div>
+
+    <script>
+        let model;
+        // Urutan alfabetis folder: 0=busuk, 1=segar, 2=segar_sedang
+        const LABELS = ["Busuk", "Segar", "Segar Sedang"];
+
+        async function init() {
+            try {
+                // Mencoba memuat model
+                model = await tf.loadGraphModel('./model_web_siap/model.json');
+                console.log("✅ Model Berhasil Dimuat");
+                document.getElementById('btn-predict').innerText = "Prediksi Sekarang";
+                document.getElementById('btn-predict').disabled = false;
+            } catch (e) {
+                console.error("Gagal muat model:", e);
+                alert("Model gagal dimuat. Cek folder model_web_siap");
+            }
+        }
+
+        function loadFile(event) {
+            const preview = document.getElementById('preview');
+            preview.src = URL.createObjectURL(event.target.files[0]);
+            preview.style.display = 'block';
+            document.getElementById('txt-upload').style.display = 'none';
+            document.getElementById('result').style.display = 'none';
+        }
+
+async function predict() {
+    if (!model) return;
+    const imgElement = document.getElementById('preview');
+    const labelText = document.getElementById('label-text');
+    const confText = document.getElementById('conf-text');
+    const resultDiv = document.getElementById('result');
+
+    const result = tf.tidy(() => {
+        const tensor = tf.browser.fromPixels(imgElement)
+            .resizeBilinear([150, 150]) // Ukuran wajib 150x150
+            .toFloat();
+        
+        // BERDASARKAN LOG ANDA: Ini adalah preprocessing yang paling akurat (0.997)
+        const normalized = tensor.div(tf.scalar(255.0)).expandDims(0);
+        
+        return model.predict(normalized).dataSync();
+    });
+
+    console.log("HASIL PREDIKSI FIX:", result);
+
+    // Cari nilai tertinggi
+    let maxIdx = 0;
+    for (let i = 1; i < result.length; i++) {
+        if (result[i] > result[maxIdx]) maxIdx = i;
+    }
+
+    // Urutan Label sesuai alfabet folder
+    const LABELS = ["Busuk", "Segar", "Segar Sedang"];
+    
+    resultDiv.style.display = 'block';
+    labelText.innerText = LABELS[maxIdx];
+    confText.innerText = `Akurasi: ${(result[maxIdx] * 100).toFixed(1)}%`;
+}
+
+        init();
+    </script>
+</body>
+</html>
